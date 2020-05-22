@@ -16,7 +16,7 @@ tau-prolog is used, including the CodeMirror mode "cm-prolog.js".
 
 ## Static web usage:
 
-Please try: https://tgarm.github.com/prolog-playground
+Please try: https://tgarm.github.io/prolog-playground
 
 ## Web with database
 
@@ -25,13 +25,10 @@ Prerequests:
 * Redis
 * PM2 (optional)
 
-Install required modules:
+Install required Python modules:
 
-* Python modules:
-
-  pip3 install redis uvicorn fastapi pydantic
+    pip3 install redis uvicorn fastapi pydantic
 
 Start server(with PM2):
-
-  cd api
-  ./start-server.sh
+    cd api
+    ./start-server.sh
