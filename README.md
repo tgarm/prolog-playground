@@ -30,5 +30,6 @@ Install required Python modules:
     pip3 install redis uvicorn fastapi pydantic
 
 Start server(with PM2):
+
     cd api
     ./start-server.sh
