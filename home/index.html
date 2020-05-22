@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+  <head>
+	<meta charset="UTF-8">
+	<link href="//unpkg.com/normalize.css/normalize.css" rel="stylesheet">
+	<link href="//unpkg.com/milligram/dist/milligram.min.css" rel="stylesheet">	
+	<link href="//unpkg.com/codemirror/lib/codemirror.css" rel="stylesheet">
+	<link href="//unpkg.com/codemirror/theme/yonce.css" rel="stylesheet">
+  </head>
+  <body>
+	<div class='container'>
+	  <div class='row'>
+		<form>
+		  <fieldset>
+			<h1>Prolog Playground 在线练习空间</h1>
+			<div id='progs'></div>
+			<h4><em>[Rules]</em>&nbsp信息与规则</h4>
+			<div>
+			  <textarea id='prolog-rules' rows=10></textarea>
+			  <pre><code id='parsed'></code></pre>
+			</div>
+			<h4><em>[Query]</em>&nbsp命令和结果查询</h4>
+			<div>
+			  <textarea id='prolog-query'></textarea>
+			  <input type='text' id='prog-name' placeholder='项目名'>
+			  <button id='run' type='button' class='button button-outline'>[Run]运行</button>
+			  <button id='save' type='button' class='button button-outline'>[Save]保存</button>
+			</div>
+			<div>
+			  <pre><code id='result'></code></pre>
+			</div>
+		  </fieldset>
+		</form>
+	  </div>
+	</div>
+  </body>
+  <script src="//unpkg.com/zepto/dist/zepto.min.js"></script>
+  <script src="//unpkg.com/tau-prolog/modules/core.js"></script>
+  <script src="//unpkg.com/codemirror/lib/codemirror.js"></script>
+  <script src="//unpkg.com/codemirror/addon/mode/simple.js"></script>
+  <script src="//unpkg.com/axios/dist/axios.min.js"></script>
+  <script src="//unpkg.com/sweetalert2/dist/sweetalert2.all.min.js"></script>
+  <script src="vendor/js/cm-prolog.js"></script>
+
+  <script>
+	const cmRules = CodeMirror.fromTextArea(document.getElementById('prolog-rules'),{
+	  lineNumbers: true,
+	  mode: 'prolog',
+	  theme: 'yonce'
+	})
+	const cmQuery = CodeMirror.fromTextArea(document.getElementById('prolog-query'),{
+	  lineNumbers: false,
+	  mode: 'prolog',
+	  theme: 'yonce'
+	})
+	cmQuery.setSize('auto','50px')
+	function result_clear(){
+	  $('code#result').text('')
+	}
+	var outDone = false
+	function parsed_update(str){
+	  const dest = $('code#parsed')
+	  dest.text(str)
+	}
+	function result_print(str){
+	  if(str=='false'||str==false){
+		outDone = true
+	  }else{
+		const dest = $('code#result')
+		const txt = dest.text()
+		if(txt==''){
+		  dest.text(str)
+		}else{
+		  dest.text(txt+"\n"+str)
+		}
+	  }
+	}
+
+	progs = []
+	async function updateProgs(){
+	  progs = []
+	  const local = await axios.get('data/prologs.json')
+	  if(local.data){
+		progs = progs.concat(local.data)
+	  }
+	  try{
+		const res = await axios.get('/api/list')
+		if(res.data.list){
+		  for(var i in res.data.list){
+			progs.push({name:res.data.list[i]})
+		  }
+		}
+	  }catch(e){
+		console.log('Exception:',e)
+	  }
+	  return progs
+	}
+
+	async function listProgs(){
+	  const progs = await updateProgs()
+	  const dest = $('div#progs')
+	  var btns = []
+	  for(var i in progs){
+		const btn = "<button class='button button-outline' type='button' data-idx='"+i+"'>"+progs[i].name+"</button>"
+		btns.push(btn)
+	  }
+	  dest.html(btns.join(''))
+	  $('div#progs button').click(async function(){
+		const name = $(this).text()
+		const idx = parseInt($(this).data('idx'))
+		if('rules' in progs[idx] && 'query' in progs[idx]){
+		  cmRules.setValue(progs[idx].rules)
+		  cmQuery.setValue(progs[idx].query)
+		  $('input#prog-name').val(progs[idx].name)
+		}else{
+		  const res = await axios.get('/api/prog/'+name)
+		  if(res.data.prog){
+			cmRules.setValue(res.data.prog.rules)
+			cmQuery.setValue(res.data.prog.query)
+			$('input#prog-name').val(res.data.prog.name)
+		  }
+		}
+	  })
+	}
+
+	function parseRules(){
+	  const rules = cmRules.getValue()
+	  var s = undefined
+	  var res
+	  if(rules==''||!rules){
+		res = '[No Rule]规则空白'
+	  }else{
+		s = pl.create()
+		const parsed = s.consult(rules)
+		if(parsed==true){
+		  res = '[Valid Rules]规则可用'
+		}else{
+		  res = '[Invalid Rules]规则错误:'+res
+		}
+	  }
+	  parsed_update(res)
+	  return s
+	}
+	cmRules.on('update', function(cm){
+	  parseRules()
+	})
+
+	$(document).ready(async function(){
+	  await listProgs()
+
+	  $('button#clear').click(function(){
+		cmRules.setValue('')
+		cmQuery.setValue('')
+		$('input#prog-name').val('')
+	  })
+	  $('button#run').click(function(){
+		outDone = false
+		const query = cmQuery.getValue()
+		result_clear()
+		const s = parseRules()
+		if(s!=undefined){
+		  const parsed = s.query(query)
+		  result_print(parsed)
+		  while(!outDone){
+			s.answer(result_print)
+		  }
+		}
+	  })
+	  $('button#save').click(async function(){
+		const name = $('input#prog-name').val()
+		const rules = cmRules.getValue()
+		const query = cmQuery.getValue()
+		if(name==''||rules==''||query==''){
+		  Swal.fire('[Rule/Query/Name should NOT be Empty]规则、问题、名称都不能为空')
+		}else{
+		  const res = await axios.post('/api/prog',{
+			name:name,
+			rules:rules,
+			query:query
+		  })
+		  await listProgs()
+		}
+	  })
+	})
+  </script>
+</html>
